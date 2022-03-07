@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "dll",
+    "injector",
+    "minhook",
+    "packets"
+]
