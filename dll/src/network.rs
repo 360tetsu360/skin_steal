@@ -3,6 +3,8 @@ use std::{
     sync::Arc,
 };
 
+use packets::SkinPayloadPacket;
+
 static mut SOCK: Option<Arc<UdpSocket>> = None;
 
 pub unsafe fn init() {
@@ -32,16 +34,51 @@ pub unsafe fn send(data: &str) {
     }
 }
 
-pub unsafe fn _player_list(start: u64, end: u64) {
+static mut PACKETID: u32 = 0;
+
+pub unsafe fn skin(runtime: u64, name: String, width: u32, height: u32, data: &str) {
     if SOCK.is_some() {
         let remote_addr: SocketAddr = "127.0.0.1:19120".parse().unwrap();
-        let data = packets::Packets::EntityList(packets::EntityListPacket {
-            enttstart: start,
-            enttend: end,
+        let len = (data.len() - data.len() % 1000) / 1000 + 1;
+
+        let header = packets::Packets::SkinHeader(packets::SkinHeaderPacket {
+            runtime_id: runtime,
+            name,
+            width,
+            height,
+            packet_id: PACKETID,
+            len: len as u32,
         });
         SOCK.as_ref()
             .unwrap()
-            .send_to(&data.encode(), remote_addr)
+            .send_to(&header.encode(), remote_addr)
             .unwrap();
+
+        let str_len = data.len();
+        let mut payloads = vec![];
+        let mut pos = 0;
+        for i in 0..len {
+            if str_len - pos > 1000 {
+                payloads.push(packets::Packets::SkinPayload(SkinPayloadPacket {
+                    packet_id: PACKETID,
+                    index: i as u32,
+                    data: data[pos..pos + 1000].to_string(),
+                }));
+                pos += 1000;
+            } else {
+                payloads.push(packets::Packets::SkinPayload(SkinPayloadPacket {
+                    packet_id: PACKETID,
+                    index: i as u32,
+                    data: data[pos..str_len].to_string(),
+                }));
+            }
+        }
+
+        for payload in payloads {
+            SOCK.as_ref()
+                .unwrap()
+                .send_to(&payload.encode(), remote_addr)
+                .unwrap();
+        }
     }
 }

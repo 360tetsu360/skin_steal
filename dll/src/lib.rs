@@ -39,8 +39,11 @@ pub extern "stdcall" fn DllMain(hinst: HINSTANCE, reason: DWORD, _reserved: LPVO
 }
 
 unsafe extern "system" fn start(_dll: *mut c_void) -> DWORD {
-    install_hooks().unwrap();
     init();
     send("Hello Logger!");
+    let addr =
+        memory::find_signature("F3 0F ?? ?? ?? ?? 00 00 ?? 0F ?? 00 F3 0F ?? ?? F3 0F ?? ?? 04");
+    send(&addr.to_string());
+    install_hooks().unwrap();
     0
 }

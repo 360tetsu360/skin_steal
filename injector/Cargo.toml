@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 packets = { path = "../packets" }
 winapi = {version = "0.3.9",features = ["winnt","accctrl","aclapi","winerror","sddl","winbase","handleapi","memoryapi","tlhelp32","stralign"]}
+libflate = "1.1.2"
+base64 = "0.13.0"
+image = "0.24.1"

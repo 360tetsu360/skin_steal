@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 pub enum Packets {
     Hello(HelloPacket),
     Log(LogPacket),
-    EntityList(EntityListPacket),
+    SkinHeader(SkinHeaderPacket),
+    SkinPayload(SkinPayloadPacket),
 }
 
 impl Packets {
@@ -28,8 +29,12 @@ impl Packets {
                 Ok(p) => Some(Self::Log(p)),
                 Err(_) => None,
             },
-            2 => match serde_json::from_str::<EntityListPacket>(&data_str) {
-                Ok(p) => Some(Self::EntityList(p)),
+            2 => match serde_json::from_str::<SkinHeaderPacket>(&data_str) {
+                Ok(p) => Some(Self::SkinHeader(p)),
+                Err(_) => None,
+            },
+            3 => match serde_json::from_str::<SkinPayloadPacket>(&data_str) {
+                Ok(p) => Some(Self::SkinPayload(p)),
                 Err(_) => None,
             },
             _ => None,
@@ -49,8 +54,13 @@ impl Packets {
                 let mut json = serde_json::to_string(p).unwrap().as_bytes().to_vec();
                 ret.append(&mut json)
             }
-            Packets::EntityList(p) => {
+            Packets::SkinHeader(p) => {
                 ret.push(2);
+                let mut json = serde_json::to_string(p).unwrap().as_bytes().to_vec();
+                ret.append(&mut json)
+            }
+            Packets::SkinPayload(p) => {
+                ret.push(3);
                 let mut json = serde_json::to_string(p).unwrap().as_bytes().to_vec();
                 ret.append(&mut json)
             }
@@ -70,7 +80,18 @@ pub struct LogPacket {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct EntityListPacket {
-    pub enttstart: u64,
-    pub enttend: u64,
+pub struct SkinHeaderPacket {
+    pub runtime_id: u64,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub packet_id: u32,
+    pub len: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SkinPayloadPacket {
+    pub packet_id: u32,
+    pub index: u32,
+    pub data: String,
 }
