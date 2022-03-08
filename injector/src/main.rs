@@ -56,7 +56,11 @@ fn main() {
             Packets::SkinPayload(e) => {
                 if headers.contains_key(&e.packet_id) && skins.contains_key(&e.packet_id) {
                     let id = e.packet_id;
-                    skins.get_mut(&e.packet_id).as_mut().unwrap();
+                    skins
+                        .get_mut(&e.packet_id)
+                        .as_mut()
+                        .unwrap()
+                        .insert(e.index, e.data);
                     if headers.get(&id).as_ref().unwrap().len
                         == skins.get(&id).as_ref().unwrap().len() as u32
                     {
@@ -83,7 +87,7 @@ fn gen_skin(header: SkinHeaderPacket, payload: BTreeMap<u32, String>) {
     decoder.read_to_end(&mut decoded_data).unwrap();
 
     image::save_buffer(
-        &std::path::Path::new(&format!("./{}.png", header.name)),
+        &std::path::Path::new(&format!("./skins/{}.png", header.name)),
         &decoded_data[..],
         header.width,
         header.height,
