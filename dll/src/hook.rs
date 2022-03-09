@@ -9,7 +9,7 @@ unsafe extern "fastcall" fn _callback(_: *const u64, _: u64, _: u64) {}
 static mut BACK_TO_FUNCTION: PlayerTick = _callback;
 
 unsafe extern "fastcall" fn entt_callback(player: *const u64, _a1: u64, _a2: u64) {
-    let runtime = player as u64;
+    let runtime = *std::mem::transmute::<u64, *const u64>(player as u64 + 0x550);
     let name =
         match (*std::mem::transmute::<u64, *const TextHolder>(player as u64 + 0x8c0)).get_text() {
             Ok(p) => p,

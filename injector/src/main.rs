@@ -87,7 +87,7 @@ fn gen_skin(header: SkinHeaderPacket, payload: BTreeMap<u32, String>) {
     decoder.read_to_end(&mut decoded_data).unwrap();
 
     image::save_buffer(
-        &std::path::Path::new(&format!("./skins/{}.png", header.name)),
+        &std::path::Path::new(&format!("./skins/{}.png", header.runtime_id)),
         &decoded_data[..],
         header.width,
         header.height,
