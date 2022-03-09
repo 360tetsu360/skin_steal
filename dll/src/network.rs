@@ -1,84 +1,48 @@
 use std::{
-    net::{SocketAddr, UdpSocket},
-    sync::Arc,
+    io::Write,
+    net::{SocketAddr, TcpStream},
+    sync::{Arc, Mutex},
 };
 
-use packets::SkinPayloadPacket;
+use lazy_static::lazy_static;
 
-static mut SOCK: Option<Arc<UdpSocket>> = None;
+lazy_static! {
+    static ref SOCK: Arc<Mutex<TcpStream>> = {
+        let remote: SocketAddr = "127.0.0.1:19120".parse().unwrap();
+        let socket = TcpStream::connect(remote).unwrap();
+        Arc::new(Mutex::new(socket))
+    };
+}
 
 pub unsafe fn init() {
-    let local_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    SOCK = Some(Arc::new(UdpSocket::bind(local_addr).unwrap()));
-
-    let remote_addr: SocketAddr = "127.0.0.1:19120".parse().unwrap();
     let data = packets::Packets::Hello(packets::HelloPacket {
-        address: local_addr.to_string(),
+        address: SOCK.lock().unwrap().local_addr().unwrap().to_string(),
     });
-    SOCK.as_ref()
-        .unwrap()
-        .send_to(&data.encode(), remote_addr)
-        .unwrap();
+    send_buf(data.encode());
 }
 
 pub unsafe fn send(data: &str) {
-    if SOCK.is_some() {
-        let remote_addr: SocketAddr = "127.0.0.1:19120".parse().unwrap();
-        let data = packets::Packets::Log(packets::LogPacket {
-            msg: data.to_owned(),
-        });
-        SOCK.as_ref()
-            .unwrap()
-            .send_to(&data.encode(), remote_addr)
-            .unwrap();
-    }
+    let data = packets::Packets::Log(packets::LogPacket {
+        msg: data.to_owned(),
+    });
+    send_buf(data.encode());
 }
 
-static mut PACKETID: u32 = 0;
+pub unsafe fn skin(runtime: u64, name: String, width: u32, height: u32, data: String) {
+    let data = packets::Packets::Skin(packets::SkinPacket {
+        runtime_id: runtime,
+        name,
+        width,
+        height,
+        data,
+    });
+    send_buf(data.encode());
+}
 
-pub unsafe fn skin(runtime: u64, name: String, width: u32, height: u32, data: &str) {
-    if SOCK.is_some() {
-        let remote_addr: SocketAddr = "127.0.0.1:19120".parse().unwrap();
-        let len = (data.len() - data.len() % 1000) / 1000 + 1;
-
-        let header = packets::Packets::SkinHeader(packets::SkinHeaderPacket {
-            runtime_id: runtime,
-            name,
-            width,
-            height,
-            packet_id: PACKETID,
-            len: len as u32,
-        });
-        SOCK.as_ref()
-            .unwrap()
-            .send_to(&header.encode(), remote_addr)
-            .unwrap();
-
-        let str_len = data.len();
-        let mut payloads = vec![];
-        let mut pos = 0;
-        for i in 0..len {
-            if str_len - pos > 1000 {
-                payloads.push(packets::Packets::SkinPayload(SkinPayloadPacket {
-                    packet_id: PACKETID,
-                    index: i as u32,
-                    data: data[pos..pos + 1000].to_string(),
-                }));
-                pos += 1000;
-            } else {
-                payloads.push(packets::Packets::SkinPayload(SkinPayloadPacket {
-                    packet_id: PACKETID,
-                    index: i as u32,
-                    data: data[pos..str_len].to_string(),
-                }));
-            }
-        }
-
-        for payload in payloads {
-            SOCK.as_ref()
-                .unwrap()
-                .send_to(&payload.encode(), remote_addr)
-                .unwrap();
-        }
-    }
+fn send_buf(mut data: Vec<u8>) {
+    let len = data.len() as u16;
+    let bytes = len.to_be_bytes();
+    data.insert(0, bytes[0]);
+    data.insert(1, bytes[1]);
+    SOCK.lock().unwrap().write_all(&data[..]).unwrap();
 }

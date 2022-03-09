@@ -31,14 +31,14 @@ lazy_static! {
     static ref STOLEN: Mutex<Vec<u64>> = Mutex::new(vec![]);
 }
 unsafe fn skin_manage(runtime: u64, name: String, width: u32, height: u32, data: *const u8) {
-    if !STOLEN.lock().unwrap().contains(&runtime) && width == 64 && height == 64 {
-        let skin_data = std::slice::from_raw_parts(data, 0x4000); //64px * 64px * 4(rgba)
+    if !STOLEN.lock().unwrap().contains(&runtime) && width > 0 && height > 0 {
+        let skin_data = std::slice::from_raw_parts(data, (width * height * 4) as usize); //64px * 64px * 4(rgba)
         let mut encoder = Encoder::new(Vec::new());
         encoder.write_all(skin_data).unwrap();
         let encoded_data = encoder.finish().into_result().unwrap();
         let base64ed = base64::encode(encoded_data);
 
-        skin(runtime, name, width, height, &base64ed);
+        skin(runtime, name, width, height, base64ed);
 
         STOLEN.lock().unwrap().push(runtime);
     }

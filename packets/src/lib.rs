@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 pub enum Packets {
     Hello(HelloPacket),
     Log(LogPacket),
-    SkinHeader(SkinHeaderPacket),
-    SkinPayload(SkinPayloadPacket),
+    Skin(SkinPacket),
 }
 
 impl Packets {
@@ -29,12 +28,8 @@ impl Packets {
                 Ok(p) => Some(Self::Log(p)),
                 Err(_) => None,
             },
-            2 => match serde_json::from_str::<SkinHeaderPacket>(&data_str) {
-                Ok(p) => Some(Self::SkinHeader(p)),
-                Err(_) => None,
-            },
-            3 => match serde_json::from_str::<SkinPayloadPacket>(&data_str) {
-                Ok(p) => Some(Self::SkinPayload(p)),
+            2 => match serde_json::from_str::<SkinPacket>(&data_str) {
+                Ok(p) => Some(Self::Skin(p)),
                 Err(_) => None,
             },
             _ => None,
@@ -54,13 +49,8 @@ impl Packets {
                 let mut json = serde_json::to_string(p).unwrap().as_bytes().to_vec();
                 ret.append(&mut json)
             }
-            Packets::SkinHeader(p) => {
+            Packets::Skin(p) => {
                 ret.push(2);
-                let mut json = serde_json::to_string(p).unwrap().as_bytes().to_vec();
-                ret.append(&mut json)
-            }
-            Packets::SkinPayload(p) => {
-                ret.push(3);
                 let mut json = serde_json::to_string(p).unwrap().as_bytes().to_vec();
                 ret.append(&mut json)
             }
@@ -80,18 +70,10 @@ pub struct LogPacket {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SkinHeaderPacket {
+pub struct SkinPacket {
     pub runtime_id: u64,
     pub name: String,
     pub width: u32,
     pub height: u32,
-    pub packet_id: u32,
-    pub len: u32,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SkinPayloadPacket {
-    pub packet_id: u32,
-    pub index: u32,
     pub data: String,
 }

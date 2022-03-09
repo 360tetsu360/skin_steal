@@ -216,6 +216,7 @@ pub unsafe fn inject(target: &str, dll: &str) -> bool {
     if proc_id == 0 {
         return false;
     }
+    println!("Minecraft PID : {}", proc_id);
 
     if !set_access_control(dll, "S-1-15-2-1") {
         return false;

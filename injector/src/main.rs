@@ -1,21 +1,30 @@
 use crate::inject::inject;
 use libflate::deflate::Decoder;
-use packets::{Packets, SkinHeaderPacket};
-use std::io::Read;
-use std::{
-    collections::{BTreeMap, HashMap},
-    net::{SocketAddr, UdpSocket},
-};
+use packets::{Packets, SkinPacket};
+use std::io::{Cursor, Read};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 
 mod inject;
 
 fn main() {
+    println!(
+        "{}",
+        r"  
+    _____________  __.___ _______      _______________________________   _____  .____     
+    /   _____/    |/ _|   |\      \    /   _____/\__    ___/\_   _____/  /  _  \ |    |    
+    \_____  \|      < |   |/   |   \   \_____  \   |    |    |    __)_  /  /_\  \|    |    
+    /        \    |  \|   /    |    \  /        \  |    |    |        \/    |    \    |___ 
+   /_______  /____|__ \___\____|__  / /_______  /  |____|   /_______  /\____|__  /_______ \
+           \/        \/           \/          \/                    \/         \/        \/"
+    );
+
     if !std::path::Path::new("./skins").is_dir() {
         std::fs::create_dir(std::path::Path::new("./skins")).unwrap();
     }
 
-    let loacl_addr: SocketAddr = "127.0.0.1:19120".parse().unwrap();
-    let udp = UdpSocket::bind(loacl_addr).unwrap();
+    let local_addr: SocketAddr = "127.0.0.1:19120".parse().unwrap();
+    let tcp = TcpListener::bind(local_addr).unwrap();
+
     unsafe {
         let success = inject(
             "Minecraft.Windows.exe",
@@ -30,70 +39,84 @@ fn main() {
         }
     }
 
-    let mut headers: HashMap<u32, SkinHeaderPacket> = HashMap::new();
-    let mut skins: HashMap<u32, BTreeMap<u32, String>> = HashMap::new();
+    for stream in tcp.incoming().flatten() {
+        std::thread::spawn(move || handle(stream));
+    }
+}
+
+fn handle(mut stream: TcpStream) {
+    let mut queue: (usize, Vec<u8>) = (0, vec![]);
     loop {
         let mut buf = [0u8; 2048];
-        let (size, _source) = udp.recv_from(&mut buf).unwrap();
+        let size = stream.read(&mut buf).expect("Minecraft closed");
 
-        let data = match Packets::decode(&buf[..size]) {
-            Some(p) => p,
-            None => continue,
-        };
+        if queue.0 != 0 {
+            if queue.0 > size {
+                let mut extra = buf[..size].to_vec();
+                queue.1.append(&mut extra);
+                queue.0 -= size;
+            } else {
+                let mut extra = buf[..queue.0].to_vec();
+                queue.1.append(&mut extra);
+                handle_packet(&queue.1[..]);
+                queue = (0, vec![]);
+            }
+        }
 
-        match data {
-            Packets::Hello(p) => {
-                println!("Connected to minecraft {}", p.address);
+        let mut cursor = Cursor::new(&buf[..size]);
+        while size > cursor.position() as usize {
+            let mut len_bytes = [0u8; 2];
+            cursor.read_exact(&mut len_bytes).unwrap();
+            let len = u16::from_be_bytes(len_bytes) as usize;
+
+            if cursor.position() as usize + len > size {
+                let length = size - cursor.position() as usize;
+                let mut buff = vec![0u8; length];
+                cursor.read_exact(&mut buff).unwrap();
+                queue = (len - length, buff);
+                break;
             }
-            Packets::Log(log) => {
-                println!("{}", log.msg);
-            }
-            Packets::SkinHeader(e) => {
-                let id = e.packet_id;
-                headers.insert(id, e);
-                skins.insert(id, BTreeMap::new());
-            }
-            Packets::SkinPayload(e) => {
-                if headers.contains_key(&e.packet_id) && skins.contains_key(&e.packet_id) {
-                    let id = e.packet_id;
-                    skins
-                        .get_mut(&e.packet_id)
-                        .as_mut()
-                        .unwrap()
-                        .insert(e.index, e.data);
-                    if headers.get(&id).as_ref().unwrap().len
-                        == skins.get(&id).as_ref().unwrap().len() as u32
-                    {
-                        let header = headers.remove(&id).unwrap();
-                        let payload = skins.remove(&id).unwrap();
-                        gen_skin(header, payload);
-                    }
-                }
-            }
+
+            handle_packet(&buf[cursor.position() as usize..cursor.position() as usize + len]);
+            cursor.set_position(cursor.position() + len as u64);
         }
     }
 }
 
-fn gen_skin(header: SkinHeaderPacket, payload: BTreeMap<u32, String>) {
-    let mut skindata = String::new();
-    for skin in payload {
-        skindata += &skin.1;
-    }
+fn handle_packet(bytes: &[u8]) {
+    let data = match Packets::decode(bytes) {
+        Some(p) => p,
+        None => return,
+    };
 
-    let buff = base64::decode(skindata).unwrap();
+    match data {
+        Packets::Hello(p) => {
+            println!("Connected to minecraft {}", p.address);
+        }
+        Packets::Log(log) => {
+            println!("{}", log.msg);
+        }
+        Packets::Skin(e) => {
+            gen_skin(e);
+        }
+    }
+}
+
+fn gen_skin(skin: SkinPacket) {
+    let buff = base64::decode(skin.data).unwrap();
 
     let mut decoder = Decoder::new(&buff[..]);
     let mut decoded_data = Vec::new();
     decoder.read_to_end(&mut decoded_data).unwrap();
 
     image::save_buffer(
-        &std::path::Path::new(&format!("./skins/{}.png", header.runtime_id)),
+        &std::path::Path::new(&format!("./skins/{}.png", skin.runtime_id)),
         &decoded_data[..],
-        header.width,
-        header.height,
+        skin.width,
+        skin.height,
         image::ColorType::Rgba8,
     )
     .unwrap();
 
-    println!("Stole {}'s skin", header.name);
+    println!("Stole {}'s skin", skin.name);
 }
